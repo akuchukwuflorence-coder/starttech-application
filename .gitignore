@@ -1,0 +1,20 @@
+﻿node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+*.exe
+*.test
+coverage.out
+
+# Kubernetes runtime secrets
+k8s/backend-config.yaml
+k8s/*secret*.yaml
+!k8s/backend-config.example.yaml
+
+# Local credentials
+*.pem
+*.key
+
+*.go.cp

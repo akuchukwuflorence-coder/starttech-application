@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: backend-api
+    spec:
+      containers:
+        - name: backend-api
+          image: starttech-backend-api:placeholder
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: ENABLE_CACHE
+              value: "true"
+            - name: LOG_FORMAT
+              value: "json"
+            - name: SECURE_COOKIE
+              value: "true"
+          envFrom:
+            - secretRef:
+                name: backend-config
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 15
+            timeoutSeconds: 2

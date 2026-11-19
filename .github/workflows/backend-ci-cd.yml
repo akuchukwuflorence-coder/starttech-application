@@ -1,0 +1,82 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "k8s/**"
+      - ".github/workflows/backend-ci-cd.yml"
+  workflow_dispatch:
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run Go tests
+        working-directory: backend
+        run: go test ./...
+
+      - name: Build Docker image
+        run: docker build -t starttech-backend-api:${{ github.sha }} ./backend
+
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: starttech-backend-api:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+
+      - name: Configure AWS credentials
+        if: github.event_name == 'workflow_dispatch'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        if: github.event_name == 'workflow_dispatch'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push Docker image to ECR
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker tag starttech-backend-api:${IMAGE_TAG} ${ECR_REGISTRY}/starttech-backend-api:${IMAGE_TAG}
+          docker push ${ECR_REGISTRY}/starttech-backend-api:${IMAGE_TAG}
+
+      - name: Configure Kubernetes access
+        if: github.event_name == 'workflow_dispatch'
+        run: aws eks update-kubeconfig --region us-east-1 --name starttech-cluster
+
+      - name: Deploy backend to EKS
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="${ECR_REGISTRY}/starttech-backend-api:${IMAGE_TAG}"
+          sed -i "s|starttech-backend-api:placeholder|${IMAGE_URI}|g" k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml -f k8s/deployment.yaml -f k8s/ingress.yaml
+          kubectl rollout status deployment/backend-api --timeout=300s
+
+
