@@ -35,7 +35,7 @@ jobs:
         run: docker build -t starttech-backend-api:${{ github.sha }} ./backend
 
       - name: Scan Docker image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: starttech-backend-api:${{ github.sha }}
           format: table
@@ -78,5 +78,6 @@ jobs:
           sed -i "s|starttech-backend-api:placeholder|${IMAGE_URI}|g" k8s/deployment.yaml
           kubectl apply -f k8s/service.yaml -f k8s/deployment.yaml -f k8s/ingress.yaml
           kubectl rollout status deployment/backend-api --timeout=300s
+
 
 
